@@ -1,0 +1,16 @@
+[project]
+name = "telegram-post-bot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-telegram-bot>=22.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.1",
+]
+[tool.ruff.lint]
+extend-select = ["B"]
