@@ -81,7 +81,7 @@ async def get_button_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data["button_name"], url=context.user_data["button_url"]
     )
     markup = InlineKeyboardMarkup([[button]])
-    message_text = f"Title: {context.user_data['title']}\n\nDescription: {context.user_data['description']}"
+    message_text = f"{context.user_data['title']}\n\n{context.user_data['description']}"
     if context.user_data["photo"]:
         await update.message.reply_photo(
             photo=context.user_data["photo"],
