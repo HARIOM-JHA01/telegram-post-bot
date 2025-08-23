@@ -14,7 +14,6 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
     filters,
-    CallbackQueryHandler,
 )
 
 try:
@@ -24,7 +23,9 @@ try:
 except ImportError:
     pass
 
-TITLE, DESCRIPTION, PHOTO, BUTTON_NAME, BUTTON_URL, TARGET_TYPE, TARGET_ID = range(7)
+VIDEO, DESCRIPTION, SPONSOR_NAME, SPONSOR_LINK = range(4)
+
+TG_DIRECTORIES_CHANNEL_ID = "-1001367214367"
 
 PERSISTENT_KEYBOARD = ReplyKeyboardMarkup(
     [["Restart", "Exit"]],
@@ -48,24 +49,42 @@ def get_env_token() -> str:
 
 async def start_post(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "Welcome! I can help you create and send a post.\n\nPlease send the post title.",
+        "Welcome! Please upload the video for your post.",
         reply_markup=PERSISTENT_KEYBOARD,
     )
-    return TITLE
+    return VIDEO
 
 
-async def get_title(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text
-    if text == "Exit":
-        return await cancel(update, context)
-    if text == "Restart":
+async def get_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.message and update.message.text in ("Exit", "Restart"):
+        if update.message.text == "Exit":
+            return await cancel(update, context)
         return await start_post(update, context)
-    context.user_data["title"] = text
+
+    video_file_id = None
+    if update.message and update.message.video:
+        video_file_id = update.message.video.file_id
+    elif (
+        update.message
+        and update.message.document
+        and getattr(update.message.document, "mime_type", "")
+    ):
+        if update.message.document.mime_type.startswith("video"):
+            video_file_id = update.message.document.file_id
+
+    if video_file_id:
+        context.user_data["video"] = video_file_id
+        await update.message.reply_text(
+            "Video received. Now enter the description for your post.",
+            reply_markup=PERSISTENT_KEYBOARD,
+        )
+        return DESCRIPTION
+
     await update.message.reply_text(
-        "Now send the description for your post.",
+        "Please upload a video file (any duration/dimensions).",
         reply_markup=PERSISTENT_KEYBOARD,
     )
-    return DESCRIPTION
+    return VIDEO
 
 
 async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -76,132 +95,54 @@ async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return await start_post(update, context)
     context.user_data["description"] = text
     await update.message.reply_text(
-        "Send a photo for the post or type skip to continue without an image.",
+        "Enter the Sponsor button text (this will be the label shown).",
         reply_markup=PERSISTENT_KEYBOARD,
     )
-    return PHOTO
+    return SPONSOR_NAME
 
 
-async def get_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text in ("Exit", "Restart"):
-        if update.message.text == "Exit":
-            return await cancel(update, context)
-        else:
-            return await start_post(update, context)
-    if update.message.photo:
-        photo_file = update.message.photo[-1].file_id
-        context.user_data["photo"] = photo_file
-        logger.info("Photo received.")
-        await update.message.reply_text(
-            "Enter the button text for your post.",
-            reply_markup=PERSISTENT_KEYBOARD,
-        )
-        return BUTTON_NAME
-    await update.message.reply_text(
-        "Please send a photo or type skip.",
-        reply_markup=PERSISTENT_KEYBOARD,
-    )
-    return PHOTO
-
-
-async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text in ("Exit", "Restart"):
-        if update.message.text == "Exit":
-            return await cancel(update, context)
-        else:
-            return await start_post(update, context)
-    context.user_data["photo"] = None
-    await update.message.reply_text(
-        "Enter the button text for your post.",
-        reply_markup=PERSISTENT_KEYBOARD,
-    )
-    return BUTTON_NAME
-
-
-async def get_button_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_sponsor_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
     if text == "Exit":
         return await cancel(update, context)
     if text == "Restart":
         return await start_post(update, context)
-    context.user_data["button_name"] = text
+    context.user_data["sponsor_name"] = text
     await update.message.reply_text(
-        "Enter the button URL.",
+        "Enter the Sponsor link (full URL).",
         reply_markup=PERSISTENT_KEYBOARD,
     )
-    return BUTTON_URL
+    return SPONSOR_LINK
 
 
-async def get_button_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def get_sponsor_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
     if text == "Exit":
         return await cancel(update, context)
     if text == "Restart":
         return await start_post(update, context)
-    context.user_data["button_url"] = text
-    keyboard = [
-        [InlineKeyboardButton("Telegram Directory", callback_data="directory")],
-        [InlineKeyboardButton("This chat", callback_data="this_chat")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    context.user_data["sponsor_link"] = text
+
+    user_button = InlineKeyboardButton(
+        context.user_data.get("sponsor_name", "Sponsor"),
+        url=context.user_data["sponsor_link"],
+    )
+    fixed_button = InlineKeyboardButton(
+        "Contact us for Sponsor - T.me/GoSmartMaster", url="https://t.me/GoSmartMaster"
+    )
+    markup = InlineKeyboardMarkup([[user_button], [fixed_button]])
+
+    caption = context.user_data.get("description", "")
+
+    await context.bot.send_video(
+        chat_id=TG_DIRECTORIES_CHANNEL_ID,
+        video=context.user_data.get("video"),
+        caption=caption,
+        reply_markup=markup,
+    )
+
     await update.message.reply_text(
-        "Where do you want to send the post?",
-        reply_markup=reply_markup,
-    )
-    return TARGET_TYPE
-
-
-async def get_target_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    if query.data == "directory":
-        context.user_data["target_id"] = "-1001367214367"
-        await query.edit_message_text("Sending to Telegram Directory...")
-    elif query.data == "this_chat":
-        context.user_data["target_id"] = str(query.message.chat.id)
-        await query.edit_message_text("Sending to this chat...")
-    else:
-        await query.edit_message_text("Invalid option.")
-        return ConversationHandler.END
-
-    class DummyMessage:
-        def __init__(self, text):
-            self.text = text
-
-    dummy_update = Update(
-        update.update_id, message=DummyMessage(context.user_data["target_id"])
-    )
-    return await get_target_id(dummy_update, context)
-
-
-async def get_target_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = update.message.text
-    if text == "Exit":
-        return await cancel(update, context)
-    if text == "Restart":
-        return await start_post(update, context)
-    context.user_data["target_id"] = text
-    button = InlineKeyboardButton(
-        context.user_data["button_name"], url=context.user_data["button_url"]
-    )
-    markup = InlineKeyboardMarkup([[button]])
-    message_text = f"{context.user_data['title']}\n\n{context.user_data['description']}"
-    target_id = context.user_data["target_id"]
-    if context.user_data["photo"]:
-        await context.bot.send_photo(
-            chat_id=target_id,
-            photo=context.user_data["photo"],
-            caption=message_text,
-            reply_markup=markup,
-        )
-    else:
-        await context.bot.send_message(
-            chat_id=target_id,
-            text=message_text,
-            reply_markup=markup,
-        )
-    await update.message.reply_text(
-        f"Your post has been sent to {target_id}.",
+        f"Your post has been sent to T.me/TGDirectories.",
         reply_markup=ReplyKeyboardRemove(),
     )
     return ConversationHandler.END
@@ -222,29 +163,22 @@ def main() -> None:
         entry_points=[
             CommandHandler("create_post", start_post),
             CommandHandler("start", start_post),
-            # Only trigger on text that is not "Exit" or "Restart"
             MessageHandler(
                 filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(Exit|Restart)$"),
                 start_post,
             ),
         ],
         states={
-            TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_title)],
+            VIDEO: [MessageHandler(filters.ALL, get_video)],
             DESCRIPTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)
             ],
-            PHOTO: [
-                MessageHandler(filters.PHOTO, get_photo),
-                MessageHandler(filters.Regex("^(skip|Skip)$"), skip_photo),
+            SPONSOR_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_sponsor_name)
             ],
-            BUTTON_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_button_name)
+            SPONSOR_LINK: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_sponsor_link)
             ],
-            BUTTON_URL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_button_url)
-            ],
-            TARGET_TYPE: [CallbackQueryHandler(get_target_type)],
-            TARGET_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_target_id)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
