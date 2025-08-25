@@ -128,7 +128,7 @@ async def get_sponsor_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         url=context.user_data["sponsor_link"],
     )
     fixed_button = InlineKeyboardButton(
-        "Contact us for Sponsor - T.me/GoSmartMaster", url="https://t.me/GoSmartMaster"
+        "Contact us for Sponsor", url="https://t.me/GoSmartMaster"
     )
     markup = InlineKeyboardMarkup([[user_button], [fixed_button]])
 
